@@ -15,7 +15,7 @@ a = Analysis(
         ("assets", "assets"),
         ("third_party", "third_party"),
     ],
-    hiddenimports=["rembg", "cv2", "pytesseract"],
+    hiddenimports=["rembg", "onnxruntime", "cv2", "pytesseract"],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

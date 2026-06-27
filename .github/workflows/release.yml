@@ -1,0 +1,54 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pyinstaller
+
+      - name: Build application
+        run: python scripts/build.py
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y
+
+      - name: Compile installer
+        run: |
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer\setup.iss
+        shell: pwsh
+
+      - name: Create portable ZIP
+        run: |
+          Compress-Archive -Path dist\HyoT-Image-Tools -DestinationPath dist\HyoT-Image-Tools-1.0.0-x64-portable.zip
+        shell: pwsh
+
+      - name: Generate SHA256 checksums
+        run: |
+          certutil -hashfile dist\HyoT-Image-Tools-1.0.0-x64-setup.exe SHA256 | Out-File -Encoding utf8 sha256.txt
+          certutil -hashfile dist\HyoT-Image-Tools-1.0.0-x64-portable.zip SHA256 | Add-Content -Encoding utf8 sha256.txt
+        shell: pwsh
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/HyoT-Image-Tools-1.0.0-x64-setup.exe
+            dist/HyoT-Image-Tools-1.0.0-x64-portable.zip
+            sha256.txt

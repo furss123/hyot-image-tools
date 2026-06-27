@@ -1,0 +1,27 @@
+import os
+from pathlib import Path
+
+APP_NAME = "HyoT Image Tools"
+APP_VERSION = "1.0.0"
+
+APPDATA_DIR = Path(os.getenv("APPDATA")) / "HyoT" / "ImageTools"
+SETTINGS_FILE = APPDATA_DIR / "settings.json"
+
+ASSETS_DIR = Path(__file__).parent.parent / "assets"
+I18N_DIR = ASSETS_DIR / "i18n"
+THIRD_PARTY_DIR = Path(__file__).parent.parent / "third_party"
+
+TOOL_IDS = [
+    "compress",
+    "resize",
+    "convert",
+    "crop",
+    "bg_remove",
+    "rotate",
+    "watermark",
+    "merge",
+    "color_adjust",
+    "ocr",
+    "ai_upscale",
+    "bulk_rename",
+]

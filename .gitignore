@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# PyInstaller
+dist/
+build/
+*.spec
+!build.spec
+
+# Software Center catalog (published in hyot-software-center repo)
+data/

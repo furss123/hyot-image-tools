@@ -1,6 +1,2 @@
-pyqt6>=6.7
-pillow>=10.4
-rembg[cpu]>=2.0
-opencv-python-headless>=4.10
-pytesseract>=0.3
-numpy>=1.26
+PyQt6>=6.7
+Pillow>=10.4

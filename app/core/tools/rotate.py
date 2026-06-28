@@ -10,12 +10,11 @@ from app.utils.file import resolve_output
 from app.utils.image import detect_format, format_extension, open_image, save_image
 
 
-def _rotate_fillcolor(img: Image.Image, fmt: str, fill_color: tuple[int, int, int]):
-    if fmt == "PNG" and img.mode in ("RGBA", "LA", "P"):
-        return (0, 0, 0, 0)
-    if img.mode == "RGBA":
-        return (*fill_color, 255)
-    return fill_color
+def _parse_fill_color(fill_color: str | tuple[int, int, int]) -> tuple[int, ...]:
+    if isinstance(fill_color, tuple):
+        return fill_color
+    color = fill_color.lstrip("#")
+    return (int(color[0:2], 16), int(color[2:4], 16), int(color[4:6], 16))
 
 
 def process(
@@ -42,8 +41,15 @@ def process(
             img = img.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
 
         if options.angle != 0:
-            fillcolor = _rotate_fillcolor(img, fmt, options.fill_color)
-            img = img.rotate(-options.angle, expand=True, fillcolor=fillcolor)
+            if options.fill_color is None:
+                img = img.convert("RGBA")
+                img = img.rotate(-options.angle, expand=True, fillcolor=None)
+                fmt = "PNG"
+            else:
+                fill = _parse_fill_color(options.fill_color)
+                if img.mode == "RGBA":
+                    fill = (*fill, 255)
+                img = img.rotate(-options.angle, expand=True, fillcolor=fill)
 
         out_path = resolve_output(
             file.path,

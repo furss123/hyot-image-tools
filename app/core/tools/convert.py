@@ -19,24 +19,11 @@ _FORMAT_EXT = {
 }
 
 
-def _has_alpha(img: Image.Image) -> bool:
-    if img.mode in ("RGBA", "LA"):
-        return True
-    if img.mode == "P" and "transparency" in img.info:
-        return True
-    return False
-
-
-def _flatten_onto_color(img: Image.Image, bg_color: tuple[int, int, int]) -> Image.Image:
-    if img.mode == "P":
-        img = img.convert("RGBA")
-    if img.mode in ("RGBA", "LA"):
-        background = Image.new("RGB", img.size, bg_color)
-        background.paste(img, mask=img.split()[-1])
-        return background
-    if img.mode != "RGB":
-        return img.convert("RGB")
-    return img
+def _parse_bg_color(bg_color: tuple[int, int, int] | str) -> tuple[int, int, int]:
+    if isinstance(bg_color, tuple):
+        return bg_color
+    hex_color = bg_color.lstrip("#")
+    return tuple(int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
 
 
 def process(
@@ -55,8 +42,16 @@ def process(
     if target_fmt == "JPG":
         target_fmt = "JPEG"
 
-    if target_fmt == "JPEG" and _has_alpha(img):
-        img = _flatten_onto_color(img, options.bg_color)
+    if options.bg_color == "transparent":
+        if target_fmt == "JPEG":
+            target_fmt = "PNG"
+        img = img.convert("RGBA")
+    elif img.mode in ("RGBA", "LA", "P"):
+        bg = Image.new("RGB", img.size, _parse_bg_color(options.bg_color))
+        if img.mode == "P":
+            img = img.convert("RGBA")
+        bg.paste(img, mask=img.split()[-1])
+        img = bg
 
     ext = _FORMAT_EXT.get(target_fmt, ".jpg")
     out_path = resolve_output(

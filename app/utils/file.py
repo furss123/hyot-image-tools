@@ -1,4 +1,19 @@
 from pathlib import Path
+import os
+import sys
+
+from PyQt6.QtCore import QUrl
+from PyQt6.QtGui import QDesktopServices
+
+
+def open_folder_in_explorer(path: Path) -> bool:
+    folder = path if path.is_dir() else path.parent
+    if not folder.exists():
+        return False
+    if sys.platform == "win32":
+        os.startfile(folder)  # noqa: S606
+        return True
+    return QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
 
 
 def resolve_output(

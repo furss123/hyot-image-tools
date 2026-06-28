@@ -1,21 +1,47 @@
 # -*- mode: python ; coding: utf-8 -*-
 from pathlib import Path
 
+from PyInstaller.utils.hooks import collect_submodules
+
 block_cipher = None
 
 project_root = Path(SPECPATH)
-icon_path = project_root / "assets" / "icons" / "app.ico"
-icon = str(icon_path) if icon_path.is_file() else None
+
+icon_candidates = [
+    project_root / "assets" / "icon.ico",
+    project_root / "app" / "assets" / "icon.ico",
+]
+icon = next((str(p) for p in icon_candidates if p.is_file()), None)
+
+_tool_ui_modules = [
+    "app.ui.tools",
+    "app.ui.tools.resize",
+    "app.ui.tools.compress",
+    "app.ui.tools.convert",
+    "app.ui.tools.crop",
+    "app.ui.tools.rotate",
+    "app.ui.tools.merge",
+    "app.ui.tools.bulk_rename",
+]
+
+hiddenimports = list(
+    dict.fromkeys(_tool_ui_modules + collect_submodules("app"))
+)
+
+datas = [
+    ("assets", "assets"),
+    ("app/assets", "app/assets"),
+]
+third_party = project_root / "third_party"
+if third_party.is_dir():
+    datas.append(("third_party", "third_party"))
 
 a = Analysis(
     [str(project_root / "main.py")],
     pathex=[str(project_root)],
     binaries=[],
-    datas=[
-        ("assets", "assets"),
-        ("third_party", "third_party"),
-    ],
-    hiddenimports=["rembg", "onnxruntime", "cv2", "pytesseract"],
+    datas=datas,
+    hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

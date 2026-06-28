@@ -1,74 +1,115 @@
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
+    QCheckBox,
     QColorDialog,
-    QComboBox,
-    QFormLayout,
     QHBoxLayout,
-    QLabel,
     QPushButton,
-    QSpinBox,
-    QVBoxLayout,
+    QSizePolicy,
+    QWidget,
 )
 
 from app.models.tool_options import ConvertOptions
 from app.ui.tools.base_tool_widget import BaseToolWidget
+from app.ui.widgets.no_wheel_widgets import NoWheelComboBox
 from app.utils.i18n import tr
 
 
 class ConvertToolWidget(BaseToolWidget):
     def __init__(self) -> None:
-        super().__init__()
-        self._bg_color = QColor(255, 255, 255)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-
-        form = QFormLayout()
-        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-
-        self._format_combo = QComboBox()
-        for fmt in ("JPEG", "PNG", "WEBP", "BMP", "TIFF", "GIF", "ICO"):
-            self._format_combo.addItem("", fmt)
-        self._format_label = QLabel()
-        form.addRow(self._format_label, self._format_combo)
-
-        self._quality_spin = QSpinBox()
-        self._quality_spin.setRange(1, 100)
-        self._quality_spin.setValue(85)
-        self._quality_label = QLabel()
-        form.addRow(self._quality_label, self._quality_spin)
-
-        bg_row = QHBoxLayout()
-        self._bg_btn = QPushButton()
-        self._bg_btn.setFixedSize(48, 28)
-        self._bg_btn.clicked.connect(self._pick_bg_color)
-        bg_row.addWidget(self._bg_btn)
-        bg_row.addStretch(1)
-        self._bg_label = QLabel()
-        form.addRow(self._bg_label, bg_row)
-
-        layout.addLayout(form)
-        layout.addStretch(1)
-
+        super().__init__(tr("convert_title"), tr("convert_desc"))
+        self._bg_color = "#FFFFFF"
+        self._selected_quality = 90
+        self._build_ui()
         self._format_combo.currentIndexChanged.connect(self._update_visibility)
-        self._update_bg_btn_style()
+        self._update_bg_swatch()
         self._update_visibility()
         self.retranslate()
+
+    def _build_ui(self) -> None:
+        self._format_combo = NoWheelComboBox()
+        for fmt in ("JPEG", "PNG", "WEBP", "BMP", "TIFF", "GIF", "ICO"):
+            self._format_combo.addItem("", fmt)
+        self._opt_row(tr("convert_format"), self._format_combo)
+
+        quality_widget = QWidget()
+        ql = QHBoxLayout(quality_widget)
+        ql.setContentsMargins(0, 0, 0, 0)
+        ql.setSpacing(6)
+
+        self._quality_btns: list[QPushButton] = []
+        self._quality_keys = [
+            ("convert_quality_low", 40),
+            ("convert_quality_medium", 65),
+            ("convert_quality_good", 80),
+            ("convert_quality_high", 90),
+            ("convert_quality_best", 95),
+        ]
+        for key, value in self._quality_keys:
+            btn = QPushButton()
+            btn.setObjectName("quickRotate")
+            btn.setCheckable(True)
+            btn.setFixedHeight(30)
+            btn.setProperty("quality_value", value)
+            btn.setProperty("quality_key", key)
+            btn.clicked.connect(lambda checked, b=btn: self._select_quality(b))
+            ql.addWidget(btn)
+            self._quality_btns.append(btn)
+
+        self._quality_btns[3].setChecked(True)
+        self._quality_row = self._opt_row(tr("convert_quality"), quality_widget)
+
+        bg_widget = QWidget()
+        bg_widget.setMinimumHeight(52)
+        bl = QHBoxLayout(bg_widget)
+        bl.setContentsMargins(0, 6, 0, 6)
+        bl.setSpacing(8)
+        bl.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+
+        self._bg_btn = QPushButton()
+        self._bg_btn.setObjectName("colorSwatch")
+        self._bg_btn.setFixedSize(28, 28)
+        self._bg_btn.setSizePolicy(
+            QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed
+        )
+        self._bg_btn.setToolTip(tr("convert_pick_color"))
+        self._bg_btn.clicked.connect(self._pick_color)
+
+        self._transparent_cb = QCheckBox()
+        self._transparent_cb.setObjectName("colorOptionCheckbox")
+        self._transparent_cb.setChecked(False)
+        self._transparent_cb.toggled.connect(self._on_transparent_toggle)
+
+        bl.addWidget(self._bg_btn)
+        bl.addWidget(self._transparent_cb)
+        bl.addStretch()
+        self._bg_row = self._opt_row(tr("convert_bg_color"), bg_widget)
+        self._bg_row.setFixedHeight(52)
+
+        from app.ui.widgets.result_preview import ResultPreviewWidget
+
+        self._result_preview = ResultPreviewWidget()
+        self.add_preview(self._result_preview)
+
+    def _select_quality(self, clicked_btn: QPushButton) -> None:
+        for btn in self._quality_btns:
+            btn.setChecked(btn is clicked_btn)
+        self._selected_quality = int(clicked_btn.property("quality_value"))
 
     def get_options(self) -> ConvertOptions:
         return ConvertOptions(
             format=self._format_combo.currentData(),
-            quality=self._quality_spin.value(),
+            quality=self._selected_quality,
             bg_color=(
-                self._bg_color.red(),
-                self._bg_color.green(),
-                self._bg_color.blue(),
+                "transparent"
+                if self._transparent_cb.isChecked()
+                else self._bg_color
             ),
         )
 
     def retranslate(self) -> None:
-        self._format_label.setText(tr("convert_format"))
+        super().retranslate()
+        self._update_header(tr("convert_title"), tr("convert_desc"))
         self._format_combo.setItemText(0, "JPG")
         self._format_combo.setItemText(1, "PNG")
         self._format_combo.setItemText(2, "WEBP")
@@ -76,26 +117,40 @@ class ConvertToolWidget(BaseToolWidget):
         self._format_combo.setItemText(4, "TIFF")
         self._format_combo.setItemText(5, "GIF")
         self._format_combo.setItemText(6, "ICO")
-        self._quality_label.setText(tr("convert_quality"))
-        self._bg_label.setText(tr("convert_bg_color"))
-        self._bg_btn.setText(tr("convert_pick_color"))
+        for btn in self._quality_btns:
+            key = btn.property("quality_key")
+            if key:
+                btn.setText(tr(str(key)))
+        self._transparent_cb.setText(tr("transparent_bg"))
+        self._bg_btn.setToolTip(tr("convert_pick_color"))
 
     def _update_visibility(self) -> None:
         fmt = self._format_combo.currentData()
-        show_quality = fmt in ("JPEG", "WEBP")
-        self._quality_label.setVisible(show_quality)
-        self._quality_spin.setVisible(show_quality)
-        show_bg = fmt == "JPEG"
-        self._bg_label.setVisible(show_bg)
-        self._bg_btn.setVisible(show_bg)
+        self._quality_row.setVisible(fmt in ("JPEG", "WEBP"))
+        self._bg_row.setVisible(fmt == "JPEG")
 
-    def _pick_bg_color(self) -> None:
-        color = QColorDialog.getColor(self._bg_color, self, tr("convert_bg_color"))
-        if color.isValid():
-            self._bg_color = color
-            self._update_bg_btn_style()
-
-    def _update_bg_btn_style(self) -> None:
+    def _update_bg_swatch(self) -> None:
         self._bg_btn.setStyleSheet(
-            f"background-color: {self._bg_color.name()}; border: 1px solid #888;"
+            f"background: {self._bg_color}; "
+            f"border: 1px solid #555555; border-radius: 4px; padding: 0;"
         )
+
+    def _pick_color(self) -> None:
+        color = QColorDialog.getColor(QColor(self._bg_color), self, tr("convert_bg_color"))
+        if color.isValid():
+            self._bg_color = color.name()
+            self._update_bg_swatch()
+            self._transparent_cb.setChecked(False)
+
+    def _on_transparent_toggle(self, checked: bool) -> None:
+        self._bg_btn.setEnabled(not checked)
+        if checked:
+            self._bg_btn.setStyleSheet(
+                "background: qlineargradient("
+                "x1:0,y1:0,x2:1,y2:1,"
+                "stop:0 #ffffff,stop:0.5 #cccccc,"
+                "stop:0.5 #999999,stop:1 #666666);"
+                "border: 1px solid #555555; border-radius: 4px; padding: 0;"
+            )
+        else:
+            self._update_bg_swatch()

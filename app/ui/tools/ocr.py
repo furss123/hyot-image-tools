@@ -1,12 +1,5 @@
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import (
-    QCheckBox,
-    QFormLayout,
-    QLabel,
-    QListWidget,
-    QListWidgetItem,
-    QVBoxLayout,
-)
+from PyQt6.QtWidgets import QCheckBox, QLabel, QListWidget, QListWidgetItem
 
 from app.models.tool_options import OcrOptions
 from app.ui.tools.base_tool_widget import BaseToolWidget
@@ -24,13 +17,7 @@ _DEFAULT_LANGS = {"kor", "eng"}
 
 class OcrToolWidget(BaseToolWidget):
     def __init__(self) -> None:
-        super().__init__()
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-
-        form = QFormLayout()
-        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-
+        super().__init__(tr("ocr_title"), tr("ocr_desc"))
         self._lang_list = QListWidget()
         self._lang_list.setMaximumHeight(140)
         for code, _ in _LANGUAGES:
@@ -44,19 +31,15 @@ class OcrToolWidget(BaseToolWidget):
             )
             item.setCheckState(state)
             self._lang_list.addItem(item)
-        self._lang_label = QLabel()
-        form.addRow(self._lang_label, self._lang_list)
+        self._opt_row(tr("ocr_languages"), self._lang_list)
 
         self._merge_cb = QCheckBox()
-        form.addRow(self._merge_cb)
-
-        layout.addLayout(form)
+        self._layout.addWidget(self._merge_cb)
 
         self._info_label = QLabel()
+        self._info_label.setObjectName("infoNote")
         self._info_label.setWordWrap(True)
-        layout.addWidget(self._info_label)
-
-        layout.addStretch(1)
+        self._layout.addWidget(self._info_label)
         self.retranslate()
 
     def get_options(self) -> OcrOptions:
@@ -73,7 +56,8 @@ class OcrToolWidget(BaseToolWidget):
         )
 
     def retranslate(self) -> None:
-        self._lang_label.setText(tr("ocr_languages"))
+        super().retranslate()
+        self._update_header(tr("ocr_title"), tr("ocr_desc"))
         for row, (code, key) in enumerate(_LANGUAGES):
             item = self._lang_list.item(row)
             if item is not None:

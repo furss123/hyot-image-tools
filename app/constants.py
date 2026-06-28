@@ -12,16 +12,11 @@ I18N_DIR = ASSETS_DIR / "i18n"
 THIRD_PARTY_DIR = Path(__file__).parent.parent / "third_party"
 
 TOOL_IDS = [
-    "compress",
     "resize",
+    "compress",
     "convert",
-    "crop",
-    "bg_remove",
     "rotate",
-    "watermark",
+    "crop",
     "merge",
-    "color_adjust",
-    "ocr",
-    "ai_upscale",
     "bulk_rename",
 ]

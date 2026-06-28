@@ -4,15 +4,23 @@ from pathlib import Path
 
 from PIL import Image
 from PyQt6.QtCore import QObject, QRunnable, Qt, QThreadPool, pyqtSignal
-from PyQt6.QtGui import QDragEnterEvent, QDragMoveEvent, QDropEvent
+from PyQt6.QtGui import (
+    QBrush,
+    QColor,
+    QDragEnterEvent,
+    QDragMoveEvent,
+    QDropEvent,
+    QMouseEvent,
+    QPainter,
+    QPen,
+    QPixmap,
+)
 from PyQt6.QtWidgets import (
     QFileDialog,
+    QFrame,
     QHBoxLayout,
-    QHeaderView,
     QLabel,
-    QPushButton,
-    QTableWidget,
-    QTableWidgetItem,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -38,8 +46,52 @@ _IMAGE_FILTER = ";;".join(
     ]
 )
 
+_EMPTY_HEIGHT = 188
+_WITH_FILES_HEIGHT = 180
+_THUMB_SIZE = 64
+_MAX_VISIBLE_THUMBS = 4
+_DROP_ICON_SIZE = 72
+_ICON_FRAME_WIDTH = 96
+_ICON_FRAME_HEIGHT = 84
+
+
+def _make_drop_icon_pixmap(color: QColor, size: int = _DROP_ICON_SIZE) -> QPixmap:
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    pen = QPen(color)
+    pen.setWidthF(max(1.4, size / 17.0))
+    painter.setPen(pen)
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+    inset = max(4, size // 6)
+    radius = max(3, size // 8)
+    painter.drawRoundedRect(
+        inset,
+        inset,
+        size - inset * 2,
+        size - inset * 2,
+        radius,
+        radius,
+    )
+    base_y = size - inset - max(3, size // 8)
+    mid_x = size // 2
+    peak_y = inset + size // 3
+    side = max(4, size // 6)
+    painter.drawLine(inset + side, base_y, mid_x, peak_y)
+    painter.drawLine(mid_x, peak_y, size - inset - side, base_y)
+    sun = max(4, size // 6)
+    painter.setBrush(QBrush(color))
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.drawEllipse(size - inset - sun - 2, inset + size // 6, sun, sun)
+    painter.end()
+    return pixmap
+
 
 def _is_image_path(path: Path) -> bool:
+    name = path.name.lower()
+    if "preview" in name or "tmp" in name:
+        return False
     return path.is_file() and path.suffix.lower() in IMAGE_EXTENSIONS
 
 
@@ -66,6 +118,33 @@ def _collect_images_from_folder(folder: Path) -> list[Path]:
     return sorted(found)
 
 
+def _make_thumbnail_label(path: Path, size: int = _THUMB_SIZE) -> QLabel:
+    label = QLabel()
+    label.setObjectName("dropThumb")
+    label.setFixedSize(size, size)
+    label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    pixmap = QPixmap(str(path))
+    if not pixmap.isNull():
+        scaled = pixmap.scaled(
+            size,
+            size,
+            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        x = max(0, (scaled.width() - size) // 2)
+        y = max(0, (scaled.height() - size) // 2)
+        label.setPixmap(scaled.copy(x, y, size, size))
+    return label
+
+
+def _make_more_label(count: int, size: int = _THUMB_SIZE) -> QLabel:
+    label = QLabel(f"+{count}")
+    label.setObjectName("dropThumbMore")
+    label.setFixedSize(size, size)
+    label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    return label
+
+
 class _MetadataSignals(QObject):
     loaded = pyqtSignal(Path, int, int, str)
 
@@ -89,14 +168,128 @@ class _MetadataWorker(QRunnable):
         self._signals.loaded.emit(self._path, width, height, fmt)
 
 
-class _DropLabel(QLabel):
+class _DropContent(QFrame):
     files_dropped = pyqtSignal(list)
+    clicked = pyqtSignal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self.setObjectName("dropZone")
         self.setAcceptDrops(True)
-        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.setMinimumHeight(120)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        self._empty_widget = QWidget()
+        empty_layout = QVBoxLayout(self._empty_widget)
+        empty_layout.setContentsMargins(16, 18, 16, 18)
+        empty_layout.setSpacing(0)
+        empty_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self._icon_frame = QWidget()
+        self._icon_frame.setObjectName("dropIconFrame")
+        icon_frame_layout = QVBoxLayout(self._icon_frame)
+        icon_frame_layout.setContentsMargins(0, 0, 0, 0)
+        icon_frame_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self._icon = QLabel()
+        self._icon.setObjectName("dropIcon")
+        self._icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._icon.setFixedSize(_DROP_ICON_SIZE, _DROP_ICON_SIZE)
+        icon_frame_layout.addWidget(self._icon)
+        empty_layout.addWidget(self._icon_frame, alignment=Qt.AlignmentFlag.AlignHCenter)
+        empty_layout.addSpacing(20)
+
+        self._hint = QLabel()
+        self._hint.setObjectName("dropHint")
+        self._hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._hint.setWordWrap(False)
+        empty_layout.addWidget(self._hint)
+        empty_layout.addSpacing(10)
+
+        self._sub_hint = QLabel()
+        self._sub_hint.setObjectName("dropSubHint")
+        self._sub_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._sub_hint.setWordWrap(False)
+        empty_layout.addWidget(self._sub_hint)
+
+        layout.addWidget(self._empty_widget, 1)
+
+        self._files_widget = QWidget()
+        files_layout = QVBoxLayout(self._files_widget)
+        files_layout.setContentsMargins(12, 12, 12, 12)
+        files_layout.setSpacing(8)
+        files_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self._thumb_row_host = QWidget()
+        self._thumb_row = QHBoxLayout(self._thumb_row_host)
+        self._thumb_row.setContentsMargins(0, 0, 0, 0)
+        self._thumb_row.setSpacing(8)
+        self._thumb_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        files_layout.addWidget(self._thumb_row_host)
+
+        self._filename_lbl = QLabel()
+        self._filename_lbl.setObjectName("dropFilename")
+        self._filename_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._filename_lbl.setWordWrap(False)
+        files_layout.addWidget(self._filename_lbl)
+
+        self._count_lbl = QLabel()
+        self._count_lbl.setObjectName("dropCount")
+        self._count_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        files_layout.addWidget(self._count_lbl)
+
+        self._files_widget.hide()
+        layout.addWidget(self._files_widget, 1)
+        self._update_icon_color()
+
+    def _update_icon_color(self) -> None:
+        color = self._sub_hint.palette().color(self._sub_hint.foregroundRole())
+        if not color.isValid():
+            color = QColor("#808080")
+        self._icon.setPixmap(_make_drop_icon_pixmap(color))
+
+    def update_drop_zone(self, files: list[FileItem]) -> None:
+        while self._thumb_row.count():
+            item = self._thumb_row.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
+        if not files:
+            self._empty_widget.setVisible(True)
+            self._files_widget.setVisible(False)
+            return
+
+        self._empty_widget.setVisible(False)
+        self._files_widget.setVisible(True)
+
+        for item in files[:_MAX_VISIBLE_THUMBS]:
+            self._thumb_row.addWidget(_make_thumbnail_label(item.path))
+
+        remaining = len(files) - _MAX_VISIBLE_THUMBS
+        if remaining > 0:
+            self._thumb_row.addWidget(_make_more_label(remaining))
+
+        first_name = files[0].filename
+        metrics = self._filename_lbl.fontMetrics()
+        elided = metrics.elidedText(
+            first_name,
+            Qt.TextElideMode.ElideMiddle,
+            max(self.width() - 48, 120),
+        )
+        self._filename_lbl.setText(elided)
+        self._filename_lbl.setToolTip(first_name)
+        self._count_lbl.setText(
+            tr("drop_files_count").replace("{count}", str(len(files)))
+        )
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        if not self._files_widget.isVisible() and event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
         if _mime_has_images(event.mimeData()):
@@ -120,6 +313,8 @@ class _DropLabel(QLabel):
 
 
 class DropZone(QWidget):
+    files_changed = pyqtSignal(list)
+
     def __init__(self) -> None:
         super().__init__()
         self._files: list[FileItem] = []
@@ -127,91 +322,57 @@ class DropZone(QWidget):
         self._metadata_signals = _MetadataSignals()
         self._metadata_signals.loaded.connect(self._on_metadata_loaded)
 
+        self.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Preferred,
+        )
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
+        layout.setSpacing(0)
 
-        self._drop_label = _DropLabel()
-        self._drop_label.files_dropped.connect(self.add_files)
-        layout.addWidget(self._drop_label)
+        self._content = _DropContent()
+        self._content.files_dropped.connect(self.add_files)
+        self._content.clicked.connect(self.add_files_dialog)
+        layout.addWidget(self._content, 1)
 
-        button_row = QHBoxLayout()
-        button_row.setSpacing(8)
-
-        self._add_files_btn = QPushButton()
-        self._add_files_btn.clicked.connect(self._browse_files)
-        button_row.addWidget(self._add_files_btn)
-
-        self._add_folder_btn = QPushButton()
-        self._add_folder_btn.clicked.connect(self._browse_folder)
-        button_row.addWidget(self._add_folder_btn)
-
-        self._clear_btn = QPushButton()
-        self._clear_btn.clicked.connect(self.clear)
-        button_row.addWidget(self._clear_btn)
-        button_row.addStretch(1)
-        layout.addLayout(button_row)
-
-        self._table = QTableWidget(0, 4)
-        self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self._table.verticalHeader().setVisible(False)
-        self._table.horizontalHeader().setStretchLastSection(True)
-        self._table.horizontalHeader().setSectionResizeMode(
-            0, QHeaderView.ResizeMode.Stretch
-        )
-        layout.addWidget(self._table, 1)
-
-        self._apply_drop_style()
+        self._update_height()
         self.retranslate()
 
     @property
     def files(self) -> list[FileItem]:
         return list(self._files)
 
+    def update_drop_zone(self, files: list[FileItem] | None = None) -> None:
+        if files is None:
+            files = self._files
+        self._content.update_drop_zone(files)
+        self._update_height()
+
     def add_files(self, paths: list[Path]) -> None:
+        paths = [
+            Path(p)
+            for p in paths
+            if _is_image_path(Path(p).resolve())
+        ]
         existing = {item.path for item in self._files}
         for raw in paths:
             path = Path(raw).resolve()
-            if not _is_image_path(path) or path in existing:
+            if path in existing:
                 continue
             existing.add(path)
             item = FileItem(path=path)
             self._files.append(item)
-            row = self._table.rowCount()
-            self._table.insertRow(row)
-            self._set_row_basic(row, item)
             self._queue_metadata(item)
+        self.update_drop_zone()
+        self.files_changed.emit(self._files)
 
     def clear(self) -> None:
         self._files.clear()
-        self._table.setRowCount(0)
+        self.update_drop_zone()
+        self.files_changed.emit(self._files)
 
-    def retranslate(self) -> None:
-        self._drop_label.setText(tr("drop_hint"))
-        self._add_files_btn.setText(tr("add_files"))
-        self._add_folder_btn.setText(tr("add_folder"))
-        self._clear_btn.setText(tr("clear"))
-        self._table.setHorizontalHeaderLabels(
-            [
-                tr("col_filename"),
-                tr("col_size"),
-                tr("col_dimensions"),
-                tr("col_format"),
-            ]
-        )
-
-    def _apply_drop_style(self) -> None:
-        self._drop_label.setStyleSheet(
-            "QLabel {"
-            "  border: 2px dashed #A0A0A0;"
-            "  border-radius: 8px;"
-            "  padding: 32px;"
-            "  background: transparent;"
-            "}"
-        )
-
-    def _browse_files(self) -> None:
+    def add_files_dialog(self) -> None:
         selected, _ = QFileDialog.getOpenFileNames(
             self,
             tr("add_files"),
@@ -221,16 +382,22 @@ class DropZone(QWidget):
         if selected:
             self.add_files([Path(p) for p in selected])
 
-    def _browse_folder(self) -> None:
+    def add_folder_dialog(self) -> None:
         folder = QFileDialog.getExistingDirectory(self, tr("add_folder"))
         if folder:
             self.add_files(_collect_images_from_folder(Path(folder)))
 
-    def _set_row_basic(self, row: int, item: FileItem) -> None:
-        self._table.setItem(row, 0, QTableWidgetItem(item.filename))
-        self._table.setItem(row, 1, QTableWidgetItem(f"{item.size_kb:.1f}"))
-        self._table.setItem(row, 2, QTableWidgetItem("..."))
-        self._table.setItem(row, 3, QTableWidgetItem("..."))
+    def retranslate(self) -> None:
+        self._content._hint.setText(tr("drop_hint"))
+        self._content._sub_hint.setText(tr("drop_hint_sub"))
+        self._content._update_icon_color()
+        if self._files:
+            self.update_drop_zone()
+
+    def _update_height(self) -> None:
+        height = _EMPTY_HEIGHT if not self._files else _WITH_FILES_HEIGHT
+        self.setMinimumHeight(height)
+        self.setMaximumHeight(height)
 
     def _queue_metadata(self, item: FileItem) -> None:
         worker = _MetadataWorker(item.path, self._metadata_signals)
@@ -246,14 +413,3 @@ class DropZone(QWidget):
             item.height = height
         if fmt:
             item.format = fmt
-
-        row = self._files.index(item)
-        if row >= self._table.rowCount():
-            return
-
-        if item.width and item.height:
-            self._table.item(row, 2).setText(f"{item.width}x{item.height}")
-        else:
-            self._table.item(row, 2).setText("-")
-
-        self._table.item(row, 3).setText(item.format or "-")

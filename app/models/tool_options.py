@@ -24,7 +24,7 @@ class ResizeOptions:
 class ConvertOptions:
     format: str = "JPEG"
     quality: int = 85
-    bg_color: tuple[int, int, int] = (255, 255, 255)
+    bg_color: tuple[int, int, int] | str = (255, 255, 255)
 
 
 @dataclass
@@ -43,13 +43,7 @@ class RotateOptions:
     flip_h: bool = False
     flip_v: bool = False
     auto_exif: bool = True
-    fill_color: tuple[int, int, int] = (255, 255, 255)
-
-
-@dataclass
-class BgRemoveOptions:
-    model: str = "u2net"
-    feather: int = 0
+    fill_color: tuple[int, int, int] | str | None = (255, 255, 255)
 
 
 @dataclass
@@ -57,8 +51,19 @@ class OcrOptions:
     languages: list[str] = field(default_factory=lambda: ["kor", "eng"])
     merge_output: bool = False
 
+@dataclass
+class BulkRenameOptions:
+    prefix: str = "image_"
+    start_number: int = 1
+    padding: int = 3
+    file_index: int = 0
+
 
 @dataclass
-class AiUpscaleOptions:
-    scale: int = 4
-    model: str = "realesrgan-x4plus"
+class MergeOptions:
+    mode: str = "horizontal"
+    gap: int = 4
+    align: str = "top"
+    grid_cols: int = 0
+    output_format: str = "PNG"
+    bg_color: str = "#FFFFFF"

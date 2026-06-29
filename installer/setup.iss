@@ -1,5 +1,5 @@
 #define MyAppName "HyoT Image Tools"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.0.1"
 #define MyAppPublisher "HyoT"
 #define MyAppExeName "HyoT-Image-Tools.exe"
 
@@ -10,7 +10,7 @@ AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 DefaultDirName={autopf}\HyoT\ImageTools
 DefaultGroupName={#MyAppName}
-OutputBaseFilename=HyoT-Image-Tools-1.0.0-x64-setup
+OutputBaseFilename=HyoT-Image-Tools-1.0.1-x64-setup
 OutputDir=..\dist
 Compression=lzma2/ultra64
 SolidCompression=yes

@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 
 APP_NAME = "HyoT Image Tools"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.0.1"
 
 APPDATA_DIR = Path(os.getenv("APPDATA")) / "HyoT" / "ImageTools"
 SETTINGS_FILE = APPDATA_DIR / "settings.json"
